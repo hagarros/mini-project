@@ -100,6 +100,10 @@ class BaswanaSenSpanner:
         self.k = k
         self.graph = AugmentedGraph(n)
         self.spanner_edges: List[Tuple[int, int, float]] = []
+        # Set mirrors spanner_edges for O(1) duplicate detection (keyed by
+        # canonicalized endpoints + weight). Without this, _add_to_spanner is
+        # O(|S|) per insertion → O(|S|²) total, dominating runtime past N≈1000.
+        self.spanner_set: Set[Tuple[int, int, float]] = set()
 
         if seed is not None:
             random.seed(seed)
@@ -306,13 +310,11 @@ class BaswanaSenSpanner:
                 self._add_to_spanner(min_edge)
 
     def _add_to_spanner(self, edge: Edge) -> None:
-        """Add edge to spanner (avoiding duplicates)"""
-        u, v = min(edge.u, edge.v), max(edge.u, edge.v)
-        edge_tuple = (u, v, edge.weight)
-        if edge_tuple not in [
-            (min(e[0], e[1]), max(e[0], e[1]), e[2])
-            for e in self.spanner_edges
-        ]:
+        """Add edge to spanner (avoiding duplicates) in O(1)."""
+        u, v = (edge.u, edge.v) if edge.u < edge.v else (edge.v, edge.u)
+        key = (u, v, edge.weight)
+        if key not in self.spanner_set:
+            self.spanner_set.add(key)
             self.spanner_edges.append((edge.u, edge.v, edge.weight))
 
 
