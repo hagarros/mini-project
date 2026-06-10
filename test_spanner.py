@@ -378,7 +378,7 @@ def large_scale_benchmark(
 
 
 # ============================================================================
-# Experiment 3 — Worst-case diluted clique (Prof. Elkin's feedback)
+# Experiment 3 — Worst-case diluted clique
 # ============================================================================
 
 def generate_diluted_clique(n: int, k: int, seed: int = 42) -> List[Tuple[int, int, float]]:

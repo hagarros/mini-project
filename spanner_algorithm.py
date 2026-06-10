@@ -1,7 +1,17 @@
 """
-Baswana-Sen Algorithm for Computing (2k-1)-Spanners in Weighted Graphs (Part 4 in the artice)
+Baswana-Sen Algorithm for Computing (2k-1)-Spanners in Weighted Graphs (Part 4 in the article)
 Expected time complexity: O(km)
-Expected spanner size: O(kn^(1+1/k)) 
+Expected spanner size: O(kn^(1+1/k))
+
+Assumptions
+-----------
+- Vertices are labeled 0 to n-1 (0-indexed integers).
+- k must be >= 2 (k=1 is the trivial case where the spanner equals the input graph).
+- Edge weights must be strictly positive.
+- Self-loops are not supported.
+- Multigraphs are not supported: each unordered vertex pair (u, v) may appear at most once.
+- Randomness uses a dedicated local RNG (random.Random(seed)); the algorithm never
+  touches Python's global random state.
 """
 
 import random
@@ -85,6 +95,16 @@ class BaswanaSenSpanner:
 
     Computes sparse spanners using a novel clustering approach that avoids
     any distance computation, achieving linear time complexity.
+
+    Constraints
+    -----------
+    - k >= 2  (enforced in __init__)
+    - n >= 1  (enforced in __init__)
+    - Vertices must be integers in [0, n-1]  (enforced in add_edge)
+    - Edge weights must be strictly positive  (enforced in add_edge)
+    - Self-loops are rejected  (enforced in add_edge)
+    - Duplicate edges (multigraph) are rejected  (enforced in add_edge)
+    - Uses a dedicated local RNG (self.rng) — global random state is never modified.
     """
 
     def __init__(self, n: int, k: int, seed: Optional[int] = None):
@@ -92,10 +112,21 @@ class BaswanaSenSpanner:
         Initialize spanner algorithm.
 
         Args:
-            n: Number of vertices
-            k: Stretch parameter (computes (2k-1)-spanner)
-            seed: Random seed for reproducibility
+            n: Number of vertices (must be >= 1; vertices are labeled 0 to n-1)
+            k: Stretch parameter (must be >= 2; computes a (2k-1)-spanner)
+            seed: Random seed for reproducibility. A dedicated local
+                  random.Random(seed) instance is created; Python's global
+                  random state is left untouched.
         """
+        if k < 2:
+            raise ValueError(
+                f"k must be >= 2, got k={k}. "
+                f"The algorithm computes a (2k-1)-spanner; "
+                f"k=1 would return the entire input graph."
+            )
+        if n < 1:
+            raise ValueError(f"n must be >= 1, got n={n}.")
+
         self.n = n
         self.k = k
         self.graph = AugmentedGraph(n)
@@ -105,11 +136,48 @@ class BaswanaSenSpanner:
         # O(|S|) per insertion → O(|S|²) total, dominating runtime past N≈1000.
         self.spanner_set: Set[Tuple[int, int, float]] = set()
 
-        if seed is not None:
-            random.seed(seed)
+        self.rng = random.Random(seed)
+
+        # Tracks seen unordered vertex pairs for duplicate-edge detection.
+        self._seen_edges: Set[Tuple[int, int]] = set()
 
     def add_edge(self, u: int, v: int, weight: float) -> None:
-        """Add edge to graph"""
+        """
+        Add an edge to the graph.
+
+        Args:
+            u, v: Endpoint vertices. Must satisfy 0 <= u < n and 0 <= v < n.
+            weight: Edge weight. Must be strictly positive.
+
+        Raises:
+            ValueError: if u or v is out of range [0, n-1], if u == v
+                        (self-loop), if weight <= 0, or if the unordered
+                        pair {u, v} has already been added (duplicate edge).
+        """
+        if not (0 <= u < self.n):
+            raise ValueError(
+                f"Vertex u={u} is out of range. Expected 0 <= u < {self.n}."
+            )
+        if not (0 <= v < self.n):
+            raise ValueError(
+                f"Vertex v={v} is out of range. Expected 0 <= v < {self.n}."
+            )
+        if u == v:
+            raise ValueError(
+                f"Self-loops are not supported (got edge ({u}, {v}))."
+            )
+        if weight <= 0:
+            raise ValueError(
+                f"Edge weight must be strictly positive, "
+                f"got weight={weight} for edge ({u}, {v})."
+            )
+        canonical = (min(u, v), max(u, v))
+        if canonical in self._seen_edges:
+            raise ValueError(
+                f"Duplicate edge ({u}, {v}): multigraphs are not supported. "
+                f"Each unordered vertex pair may appear at most once."
+            )
+        self._seen_edges.add(canonical)
         self.graph.add_edge(u, v, weight)
 
     def compute_spanner(self) -> List[Tuple[int, int, float]]:
@@ -150,10 +218,10 @@ class BaswanaSenSpanner:
         4. Update clustering
         5. Remove intra-cluster edges
         """
-        # Step 1: Sample clusters with probability n^(-1/k)
+        # Step 1: Sample clusters with probability n^(-1/k) using local RNG
         p = self.n ** (-1.0 / self.k)
         current_clusters = set(cluster_center.values())
-        sampled_clusters = {c for c in current_clusters if random.random() < p}
+        sampled_clusters = {c for c in current_clusters if self.rng.random() < p}
 
         # Initialize new clustering
         new_cluster_center = {}
@@ -161,7 +229,7 @@ class BaswanaSenSpanner:
 
         # Step 2: Find nearest sampled cluster for each vertex
         nearest_sampled_cluster = {}
-        nearest_edge_weight = {}
+        nearest_sampled_edge = {}
 
         for v in self.graph.vertices:
             # If v is in a sampled cluster, it remains there
@@ -179,7 +247,7 @@ class BaswanaSenSpanner:
 
             if min_edge:
                 nearest_sampled_cluster[v] = cluster_center[min_edge.v]
-                nearest_edge_weight[v] = min_edge.weight
+                nearest_sampled_edge[v] = min_edge
 
         # Step 3: Add edges to spanner based on cases
         for v in self.graph.vertices:
@@ -193,11 +261,11 @@ class BaswanaSenSpanner:
             # Case (b): v adjacent to sampled cluster(s)
             else:
                 nearest_cluster = nearest_sampled_cluster[v]
-                threshold_weight = nearest_edge_weight[v]
+                threshold_edge = nearest_sampled_edge[v]
 
                 self._add_edges_case_b(
                     v, cluster_center, nearest_cluster,
-                    threshold_weight, new_cluster_edges
+                    threshold_edge, new_cluster_edges
                 )
 
                 new_cluster_center[v] = nearest_cluster
@@ -233,7 +301,7 @@ class BaswanaSenSpanner:
         v: int,
         cluster_center: Dict[int, int],
         nearest_cluster: int,
-        threshold_weight: float,
+        threshold_edge: Edge,
         new_cluster_edges: Dict[int, List[Tuple[int, int, float]]]
     ) -> None:
         """
@@ -259,7 +327,7 @@ class BaswanaSenSpanner:
         # Add edges lighter than threshold to other clusters
         cluster_edges_map = defaultdict(list)
         for edge in self.graph.get_active_edges(v):
-            if edge.weight < threshold_weight - 1e-10:  # Strict inequality
+            if edge < threshold_edge:
                 neighbor_cluster = cluster_center.get(edge.v, edge.v)
                 cluster_edges_map[neighbor_cluster].append(edge)
 
@@ -328,31 +396,19 @@ def compute_spanner(
     Compute (2k-1)-spanner for a weighted graph.
 
     Args:
-        edges: List of (u, v, weight) tuples representing graph edges
-        n: Number of vertices (labeled 0 to n-1)
-        k: Stretch parameter (output is a (2k-1)-spanner)
-        seed: Optional random seed for reproducibility
+        edges: List of (u, v, weight) tuples representing graph edges.
+               Vertices must be integers in [0, n-1]. Weights must be
+               strictly positive. Self-loops and duplicate edges are rejected.
+        n: Number of vertices (vertices are labeled 0 to n-1; must be >= 1)
+        k: Stretch parameter (must be >= 2; output is a (2k-1)-spanner)
+        seed: Optional random seed for reproducibility. Uses a local
+              random.Random instance; Python's global random state is unaffected.
 
     Returns:
         List of (u, v, weight) tuples representing spanner edges
 
     """
-    # Ensure distinct weights for deterministic behavior
-    edges_adjusted = []
-    for idx, (u, v, w) in enumerate(edges):
-        # Add tiny epsilon based on edge ID for tie-breaking
-        weight = w + idx * 1e-12
-        edges_adjusted.append((u, v, weight))
-
-    # Create algorithm instance
     algo = BaswanaSenSpanner(n, k, seed)
-
-    # Add edges
-    for u, v, weight in edges_adjusted:
-        algo.add_edge(u, v, weight)
-
-    # Compute spanner
-    spanner = algo.compute_spanner()
-
-    # Clean up weights (remove epsilon)
-    return [(u, v, round(w, 10)) for u, v, w in spanner]
+    for u, v, w in edges:
+        algo.add_edge(u, v, w)
+    return algo.compute_spanner()

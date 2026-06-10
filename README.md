@@ -45,10 +45,10 @@ mini_project/
 **`spanner_algorithm.py`**  
 Contains three classes and one convenience function:
 
-- `Edge` - represents one directed half edge in an augmented adjacency list. Each undirected edge is stored as two `Edge` objects that point at each other via twin pointers, enabling O(1) symmetric deletion.
+- `Edge` - represents one directed half edge in an augmented adjacency list. Each undirected edge is stored as two `Edge` objects that point at each other via twin pointers, enabling O(1) symmetric deletion. `Edge.__lt__` defines a strict total order — weight first, then edge id as a deterministic tiebreaker — so all ordering decisions in the algorithm (including the case (b) threshold filter) use a single consistent comparison without modifying original edge weights.
 - `AugmentedGraph` - adjacency-list graph supporting O(1) edge deletion.
-- `BaswanaSenSpanner` - the full algorithm. `compute_spanner()` runs Phase 1 (k − 1 cluster-forming iterations) followed by Phase 2 (vertex-cluster joining) and returns the spanner as a list of `(u, v, weight)` tuples.
-- `compute_spanner(edges, n, k, seed)` - a stateless convenience wrapper that handles weight tie breaking and returns the spanner directly.
+- `BaswanaSenSpanner` - the full algorithm. `compute_spanner()` runs Phase 1 (k − 1 cluster-forming iterations) followed by Phase 2 (vertex-cluster joining) and returns the spanner as a list of `(u, v, weight)` tuples. Randomness is isolated in a dedicated `random.Random(seed)` instance (`self.rng`); the algorithm never reads from or writes to Python's global random state.
+- `compute_spanner(edges, n, k, seed)` - a stateless convenience wrapper that constructs the graph and returns the spanner directly. Original edge weights are passed through unchanged. All input validation is applied before the algorithm runs (see *Input constraints* below).
 
 **`test_spanner.py`**  
 Defines three self contained experiments along with shared Dijkstra and BFS helpers. Running this file executes all three experiments in sequence and writes results to CSV.
@@ -125,7 +125,7 @@ for u, v, w in my_edges:
 spanner = algo.compute_spanner()  # Returns List[Tuple[int, int, float]]
 ```
 
-The `seed` parameter makes the output fully reproducible. Omitting it uses Python's default random state.
+The `seed` parameter makes the output fully reproducible. Omitting it leaves the local RNG in an arbitrary (but still isolated) state. In either case, Python's global `random` state is never read or modified by the algorithm.
 
 ---
 
