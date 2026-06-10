@@ -336,11 +336,6 @@ def compute_spanner(
     Returns:
         List of (u, v, weight) tuples representing spanner edges
 
-    Example:
-        >>> edges = [(0, 1, 1.0), (1, 2, 2.0), (0, 2, 4.0)]
-        >>> spanner = compute_spanner(edges, n=3, k=2)
-        >>> len(spanner)  # Should be <= 3
-        2
     """
     # Ensure distinct weights for deterministic behavior
     edges_adjusted = []

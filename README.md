@@ -1,70 +1,119 @@
-# Baswana–Sen Sparse Spanner — Implementation & Empirical Study
+# Baswana–Sen Sparse Spanner: Implementation and Empirical Evaluation
 
-Python implementation and experimental evaluation of the linear-time randomized
-algorithm from:
-
-> Surender Baswana and Sandeep Sen.
-> *A Simple and Linear Time Randomized Algorithm for Computing Sparse Spanners
-> in Weighted Graphs.* ICALP 2003 / Random Structures & Algorithms 2007.
-
-**Student:** Hagar Rosenthal · **Advisor:** Prof. Michael Elkin · Ben-Gurion University
+**Course:** Mini-Project in Algorithms  
+**Students:** Hagar Rosenthal, Eden Zeira  
+**Advisor:** Prof. Michael Elkin  
+**Institution:** Ben-Gurion University of the Negev
 
 ---
 
-## What is a (2k−1)-spanner?
+## Overview
 
-Given a weighted undirected graph G = (V, E), a *t-spanner* is a subgraph
-H = (V, E_S) with E_S ⊆ E such that for every pair u, v ∈ V:
+This project implements and empirically evaluates the randomized graph spanner algorithm introduced by Baswana and Sen:
+
+> Surender Baswana and Sandeep Sen.  
+> *A Simple and Linear Time Randomized Algorithm for Computing Sparse Spanners in Weighted Graphs.*  
+> ICALP 2003 / Random Structures & Algorithms, 30(4):532–563, 2007.
+
+Given a weighted undirected graph G = (V, E) and an integer parameter k ≥ 2, the algorithm produces a **(2k − 1)-spanner**: a subgraph H = (V, E_S) satisfying
 
 ```
-dist_H(u, v) ≤ t · dist_G(u, v)
+dist_H(u, v) ≤ (2k − 1) · dist_G(u, v)   for all u, v ∈ V
 ```
 
-For an integer parameter k > 1, the Baswana–Sen algorithm produces a
-**(2k − 1)-spanner** with the following guarantees:
+with expected edge count O(k · n^(1+1/k)) and expected running time O(k · m). This is optimal up to constant factors, matching the lower bound implied by Erdős' girth conjecture.
 
-| Quantity         | Bound                        |
-|------------------|------------------------------|
-| Stretch          | 2k − 1                       |
-| Expected size    | O(k · n^(1+1/k))             |
-| Expected runtime | O(k · m)                     |
-
-The size matches the lower bound implied by Erdős' girth conjecture up to a
-factor of k.
+The algorithm works through a **randomized clustering process** that runs in k − 1 phases, followed by a vertex-cluster joining phase. Crucially, it never computes any shortest paths or BFS trees — all decisions are purely local, based on edge weights between adjacent clusters.
 
 ---
 
-## Repository layout
+## Repository Structure
 
 ```
-mini-project/
-├── spanner_algorithm.py   Core algorithm: Edge, AugmentedGraph, BaswanaSenSpanner, compute_spanner()
-├── test_spanner.py        Two experiments: correctness invariants + large-scale benchmark
-└── README.md              This file
+mini_project/
+├── spanner_algorithm.py     Core algorithm implementation
+├── test_spanner.py          Experimental driver: three evaluation experiments
+├── csv_results/             Output directory for experimental results
+│   ├── results_correctness.csv   Experiment 1 output
+│   ├── results_benchmark.csv     Experiment 2 output
+│   └── results_worst_case.csv    Experiment 3 output
+└── README.md                This file
 ```
 
-No external dependencies — pure Python 3.9+ (`heapq`, `csv`, `random`, `collections`).
+### Key files
+
+**`spanner_algorithm.py`**  
+Contains three classes and one convenience function:
+
+- `Edge` - represents one directed half edge in an augmented adjacency list. Each undirected edge is stored as two `Edge` objects that point at each other via twin pointers, enabling O(1) symmetric deletion.
+- `AugmentedGraph` - adjacency-list graph supporting O(1) edge deletion.
+- `BaswanaSenSpanner` - the full algorithm. `compute_spanner()` runs Phase 1 (k − 1 cluster-forming iterations) followed by Phase 2 (vertex-cluster joining) and returns the spanner as a list of `(u, v, weight)` tuples.
+- `compute_spanner(edges, n, k, seed)` - a stateless convenience wrapper that handles weight tie breaking and returns the spanner directly.
+
+**`test_spanner.py`**  
+Defines three self contained experiments along with shared Dijkstra and BFS helpers. Running this file executes all three experiments in sequence and writes results to CSV.
+
+**`csv_results/`**  
+Pre generated example output included for reference, so the results can be reviewed without running the experiments. When you run `test_spanner.py`, new CSV files are written to the directory the script is executed from, not here.
 
 ---
 
-## Quick start
+## Prerequisites and Installation
+
+The project has **no external dependencies**. It uses only the Python standard library (`heapq`, `csv`, `random`, `collections`, `time`).
+
+**Requirements:**
+- Python 3.9 or newer
+
+**Verify your Python version:**
+```bash
+python --version
+# or, on systems where both Python 2 and 3 are installed:
+python3 --version
+```
+
+**Clone the repository:**
+```bash
+git clone <repository-url>
+cd mini_project
+```
+
+No package installation step is needed. The project is ready to run immediately after cloning.
+
+---
+
+## How to Run
+
+### Run all three experiments
 
 ```bash
-python3 test_spanner.py
-# → writes results_correctness.csv and results_benchmark.csv
+python test_spanner.py
 ```
 
-### Programmatic API
+This executes the three experiments sequentially and writes three CSV files (`results_correctness.csv`, `results_benchmark.csv`, `results_worst_case.csv`) to the directory you run the script from. Typical total runtime on a modern laptop is under two minutes.
+
+### Use the algorithm in your own code
+
+**Simple interface** — pass a list of edges and get back the spanner:
 
 ```python
 from spanner_algorithm import compute_spanner
 
-edges = [(0, 1, 2.5), (1, 2, 3.0), (2, 3, 1.5), (0, 3, 8.0), (1, 3, 4.0)]
+# Each edge is a (u, v, weight) tuple; vertices are 0-indexed integers
+edges = [
+    (0, 1, 2.5),
+    (1, 2, 3.0),
+    (2, 3, 1.5),
+    (0, 3, 8.0),
+    (1, 3, 4.0),
+]
 spanner = compute_spanner(edges, n=4, k=2, seed=42)
-# spanner is a list of (u, v, weight) tuples; len(spanner) ≤ k · n^(1+1/k)
+# Returns a list of (u, v, weight) tuples
+# Stretch guarantee: ≤ 2k−1 = 3
+# Expected size: ≤ k · n^(1+1/k) ≈ 2 · 4^1.5 ≈ 16 edges
 ```
 
-For incremental graph construction:
+**Incremental interface** — build the graph edge by edge, then compute:
 
 ```python
 from spanner_algorithm import BaswanaSenSpanner
@@ -72,104 +121,148 @@ from spanner_algorithm import BaswanaSenSpanner
 algo = BaswanaSenSpanner(n=100, k=3, seed=42)
 for u, v, w in my_edges:
     algo.add_edge(u, v, w)
-spanner = algo.compute_spanner()
+
+spanner = algo.compute_spanner()  # Returns List[Tuple[int, int, float]]
 ```
 
----
-
-## Algorithm at a glance
-
-The algorithm is purely *local* — it never computes BFS levels or shortest-path
-trees. Two phases:
-
-**Phase 1 — Forming clusters** (k − 1 iterations). Each iteration:
-1. Sample each current cluster independently with probability n^(−1/k).
-2. For every unsampled vertex v, find the cheapest edge to *any* sampled cluster.
-3. Add carefully chosen edges to the spanner (cases (a) and (b) of §4.2 in the paper).
-4. Discard intra-cluster edges of the new clustering.
-
-The clustering radius grows by at most one per iteration (Theorem 4.1).
-
-**Phase 2 — Vertex–cluster joining**. For every remaining vertex v and every
-neighboring cluster c, add the lightest edge between v and c.
-
-Theorem 4.2 + the Phase-2 argument together yield the (2k − 1) stretch.
-
-### Implementation notes
-
-- **Augmented adjacency lists with twin pointers**
-  ([spanner_algorithm.py:12-31](spanner_algorithm.py#L12-L31)) — every undirected
-  edge is stored twice and the two `Edge` objects point at each other, giving
-  O(1) symmetric deletion.
-- **Tie-breaking** — distinct weights are guaranteed by adding `idx · 1e-12`
-  to each input weight ([spanner_algorithm.py:344-348](spanner_algorithm.py#L344-L348)).
-- **O(1) duplicate detection** — `BaswanaSenSpanner` keeps a parallel
-  `spanner_set` so `_add_to_spanner` is O(1) instead of the original
-  O(|E_S|) list comprehension. This was the bottleneck above n ≈ 1000.
+The `seed` parameter makes the output fully reproducible. Omitting it uses Python's default random state.
 
 ---
 
-## Empirical evaluation
+## Experiments and Evaluation
 
-`test_spanner.py` runs two experiments end-to-end and writes per-row CSVs:
+The test suite contains three experiments, each targeting a different aspect of the algorithm's behavior.
 
-| Experiment | What it does | Output |
-|---|---|---|
-| `correctness_experiment` | Sweeps (n, p, k, trial) over small/medium random graphs. On every graph verifies three invariants: size ≤ k·n^(1+1/k), connectivity preserved, max stretch ≤ 2k−1 (full APSP Dijkstra). | `results_correctness.csv` |
-| `large_scale_benchmark` | Random graphs at n = 1k…10k. Records runtime and size ratio; estimates stretch from 400 random (s, t) pairs (full APSP at n=10k would be ~n³ log n). | `results_benchmark.csv` |
+### Experiment 1 - Correctness Verification
 
-Both experiments reuse one Dijkstra per source by grouping sampled targets per
-source — measurable cost stays at ≤400 shortest-path computations regardless of
-graph size.
+**Purpose:** Confirm that the spanner satisfies all three formal guarantees on small and medium sized graphs where exact verification is affordable.
 
-### Stretch verification — exact vs. sampled
 
-| Mode        | Cost                                              | Used by               |
-|-------------|---------------------------------------------------|-----------------------|
-| Full APSP   | n × Dijkstra (~n² log n total)                    | `correctness_experiment` (small n) |
-| Sampled (~400 pairs) | ≤400 Dijkstras (one per distinct source) | `large_scale_benchmark` (n ≥ 1000) |
+**Parameter grid:**
 
-The sampled variant draws uniform (u, v) pairs via `random.Random(seed).randrange`
-and reports the number of pairs actually evaluated, so the source of every
-stretch number stays explicit in the CSV.
+| Parameter | Values tested |
+|-----------|--------------|
+| n (vertices) | 20, 40, 60 |
+| p (edge probability) | 0.15, 0.30, 0.50 |
+| k (stretch parameter) | 2, 3, 4 |
+| Trials per configuration | 3 |
 
----
+**What is checked for each graph:**
+1. **Size bound** - is `|E_S| ≤ k · n^(1+1/k)`?
+2. **Connectivity** - does H preserve the connected component structure of G? Every pair of vertices connected in G must also be connected in H.
+3. **Stretch compliance** - is `dist_H(u, v) / dist_G(u, v) ≤ 2k − 1` for every reachable pair?
 
-## Reproducing results
-
-Every randomized component takes a `seed` argument. The same seed → identical
-spanner (modulo Python's hash randomization, which the algorithm does not depend
-on). The benchmark and correctness CSVs include the seed implicitly via the
-trial index and base seed declared in their respective driver functions.
+Stretch is verified using **full all-pairs shortest paths** (one Dijkstra per source vertex), which is feasible because n ≤ 60.
 
 ---
 
-## Theoretical context
+### Experiment 2 - Large-Scale Performance Benchmark
 
-**Lower bound.** Erdős' girth conjecture states that for every k there exist
-graphs with Ω(n^(1+1/k)) edges and girth > 2k. Such a graph admits no proper
-spanner with stretch < 2k+1, so Ω(n^(1+1/k)) edges are necessary for any
-(2k−1)-spanner in the worst case.
+**Purpose:** Measure how the algorithm's running time and the spanner's size scale with graph size, and verify that the stretch guarantee holds in practice.
 
-**Prior algorithms** (running times for the (2k−1)-spanner with size O(k·n^(1+1/k))):
-- Althöfer et al. (1993): O(m · n^(1+1/k))
-- Cohen (1998): O(m · n^(1/k)) with stretch (2k+ε)
-- Thorup–Zwick (2005): O(k · m · n^(1/k))
-- **Baswana–Sen (2003):** O(k · m) — linear in the input.
+
+**Parameter grid:**
+
+| Parameter | Values tested |
+|-----------|--------------|
+| n (vertices) | 1,000 · 2,000 · 4,000 · 7,000 · 10,000 |
+| p (edge probability) | 0.005, 0.02 |
+| k (stretch parameter) | 2, 3 |
+
+**Stretch estimation:** Full APSP is not practical at n = 10,000. Instead, stretch is estimated from **400 randomly sampled (s, t) pairs**. Pairs are grouped by source so that each Dijkstra computation is reused across all targets sharing that source, keeping verification cost bounded regardless of n.
 
 ---
 
-## Citation
+### Experiment 3 - Worst-Case Diluted Clique
 
-```bibtex
-@article{baswana2007simple,
-  title   = {A simple and linear time randomized algorithm for computing
-             sparse spanners in weighted graphs},
-  author  = {Baswana, Surender and Sen, Sandeep},
-  journal = {Random Structures \& Algorithms},
-  volume  = {30},
-  number  = {4},
-  pages   = {532--563},
-  year    = {2007}
-}
-```
+**Purpose:** Stress test the algorithm on graphs designed to be adversarial inputs that already have close to the minimum number of edges any (2k−1)-spanner must contain.
+
+
+**Parameter grid:**
+
+| Parameter | Values tested |
+|-----------|--------------|
+| n (vertices) | 1,000 · 2,000 · 4,000 · 7,000 · 10,000 |
+| k (stretch parameter) | 2, 3, 4 |
+
+**Graph construction:** Each graph starts as a complete graph on n vertices and then each of the n(n − 1)/2 candidate edges is kept independently with probability p = n^(1/k) / n. All retained edges are assigned weight 1 (unweighted). This survival probability is chosen so that the expected edge count is roughly ½ · n^(1 + 1/k) - exactly the theoretical lower bound on spanner size, making these graphs a natural stress test: the input is already near optimal in density, so there is little room for the algorithm to compress it further.
+
+Stretch is estimated from 400 sampled pairs.
+
+---
+
+## Output Format
+
+Running `test_spanner.py` produces three CSV files in the directory the script is executed from. The `csv_results/` folder in this repository contains pre generated example output with the same format.
+
+### `results_correctness.csv`
+
+One row per (n, p, k, trial) combination.
+
+| Column | Description |
+|--------|-------------|
+| `n` | Number of vertices |
+| `p` | Edge probability used to generate the graph |
+| `k` | Stretch parameter |
+| `trial` | Trial index within this configuration (0-based) |
+| `m` | Actual number of edges in the generated graph |
+| `spanner_size` | Number of edges in the computed spanner |
+| `size_bound` | Theoretical size bound: k · n^(1+1/k) |
+| `size_ok` | `True` if `spanner_size ≤ size_bound` |
+| `connectivity_ok` | `True` if H preserves all connected components of G |
+| `stretch_ok` | `True` if no pair exceeds the (2k−1) stretch limit |
+| `max_stretch` | Largest observed `dist_H(u,v) / dist_G(u,v)` across all reachable pairs |
+| `stretch_limit` | The stretch limit for this k, equal to 2k−1 |
+| `time_s` | Wall-clock time in seconds to compute the spanner |
+| `passed` | `True` if all three invariants hold |
+
+---
+
+### `results_benchmark.csv`
+
+One row per (n, p, k) combination.
+
+| Column | Description |
+|--------|-------------|
+| `n` | Number of vertices |
+| `p` | Edge probability |
+| `k` | Stretch parameter |
+| `m` | Actual number of edges in the graph |
+| `spanner_size` | Number of edges in the computed spanner |
+| `size_ratio` | `spanner_size / m` — fraction of original edges retained |
+| `size_bound` | Theoretical size bound: k · n^(1+1/k) |
+| `time_s` | Wall-clock time in seconds to compute the spanner |
+| `pairs_sampled` | Number of (s, t) pairs drawn for stretch estimation |
+| `pairs_evaluated` | Pairs where both endpoints were reachable (finite distance in G) |
+| `disconnected_pairs` | Pairs connected in G but disconnected in H (should be 0) |
+| `max_stretch` | Largest observed stretch ratio among evaluated pairs |
+| `avg_stretch` | Mean stretch ratio among evaluated pairs |
+| `violations` | Number of pairs whose stretch exceeded 2k−1 (should be 0) |
+| `stretch_limit` | The stretch limit for this k, equal to 2k−1 |
+
+---
+
+### `results_worst_case.csv`
+
+One row per (n, k) combination.
+
+| Column | Description |
+|--------|-------------|
+| `n` | Number of vertices |
+| `k` | Stretch parameter |
+| `p` | Edge survival probability used: n^(1/k) / n |
+| `m` | Actual number of edges in the diluted clique |
+| `spanner_size` | Number of edges in the computed spanner |
+| `sparsification_ratio` | `spanner_size / m` — how much the spanner reduces edge count |
+| `size_bound` | Theoretical size bound: k · n^(1+1/k) |
+| `time_s` | Wall-clock time in seconds to compute the spanner |
+| `pairs_sampled` | Number of (s, t) pairs drawn for stretch estimation |
+| `pairs_evaluated` | Pairs with finite distance in G |
+| `disconnected_pairs` | Pairs connected in G but disconnected in H (should be 0) |
+| `max_stretch` | Largest observed stretch ratio among evaluated pairs |
+| `avg_stretch` | Mean stretch ratio among evaluated pairs |
+| `violations` | Number of pairs whose stretch exceeded 2k−1 (should be 0) |
+| `stretch_limit` | The stretch limit for this k, equal to 2k−1 |
+
+A `sparsification_ratio` close to 1 in Experiment 3 indicates that the input graph was already near optimal in density and the algorithm could not reduce it further  confirming that the lower bound is essentially tight.
+

@@ -1,6 +1,4 @@
 """
-Test suite for the Baswana-Sen Spanner Algorithm.
-
 Three experiments:
   1. Correctness — verify three invariants (size bound, connectivity,
      stretch compliance) on small/medium random graphs using full APSP.
@@ -9,11 +7,8 @@ Three experiments:
      reasonable wall-clock time.
   3. Worst-case (diluted clique) — N = 1,000 .. 10,000 unweighted graphs
      where each clique edge is kept independently with probability
-     p = n^(1/k) / n. Expected edge count is already ≈ ½·n^(1+1/k), so
-     the spanner has little room to sparsify further.
+     p = n^(1/k) / n. 
 
-Run with `python3 test_spanner.py` — writes results_correctness.csv,
-results_benchmark.csv, and results_worst_case.csv in the current directory.
 """
 
 import csv
@@ -27,7 +22,6 @@ from spanner_algorithm import compute_spanner
 
 
 def generate_random_graph(n: int, p: float = 0.3, seed: int = 42) -> List[Tuple[int, int, float]]:
-    """Erdős–Rényi G(n, p) with uniform weights in [1, 10]."""
     rng = random.Random(seed)
     edges: List[Tuple[int, int, float]] = []
     for i in range(n):
@@ -85,7 +79,6 @@ def _components(adj: Dict[int, List[Tuple[int, float]]], n: int) -> List[int]:
 
 
 def _size_bound(n: int, k: int) -> float:
-    """Expected size bound from Theorem 4.3: k * n^(1 + 1/k)."""
     return k * (n ** (1 + 1.0 / k))
 
 
@@ -391,8 +384,7 @@ def large_scale_benchmark(
 def generate_diluted_clique(n: int, k: int, seed: int = 42) -> List[Tuple[int, int, float]]:
     """
     Unweighted clique of size n, diluted by keeping each edge independently
-    with probability p = n^(1/k) / n. Expected edge count ≈ ½·n^(1+1/k),
-    matching the Erdős girth lower bound up to constants. All weights = 1.
+    with probability p = n^(1/k) / n. All weights = 1.
     """
     rng = random.Random(seed)
     p = (n ** (1.0 / k)) / n
